@@ -63,25 +63,27 @@ def _extract_json(raw_text: str) -> dict:
     return json.loads(cleaned)
 
 
-@app.post("/process-screenshot", response_model=AnalysisResponse)
-async def process_screenshot(image: UploadFile = File(...)):
-    image_bytes = await image.read()
-    if len(image_bytes) == 0:
-        raise HTTPException(400, "Empty image")
 
+class ScreenshotRequest(BaseModel):
+    image_base64: str
+    mime_type: str = "image/jpeg"
+
+@app.post("/process-screenshot", response_model=AnalysisResponse)
+async def process_screenshot(payload: ScreenshotRequest):
+    import base64
+    image_bytes = base64.b64decode(payload.image_base64)
+    if not image_bytes:
+        raise HTTPException(400, "Empty image")
     prompt_parts = [
         ANALYSIS_SCHEMA_PROMPT,
-        {"mime_type": image.content_type or "image/jpeg", "data": image_bytes},
+        {"mime_type": payload.mime_type, "data": image_bytes},
     ]
-
     try:
         result = model.generate_content(prompt_parts)
         parsed = _extract_json(result.text)
         return AnalysisResponse(**parsed)
     except Exception as e:
         raise HTTPException(502, f"Gemini analysis failed: {e}")
-
-
 
 @app.get("/health")
 async def health():
